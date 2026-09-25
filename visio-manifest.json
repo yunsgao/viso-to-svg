@@ -1,0 +1,9 @@
+{
+  "id": "viso-to-svg",
+  "name": "Visio to SVG",
+  "version": "0.1.6",
+  "minAppVersion": "1.5.0",
+  "description": "Export Visio VSD files to SVG without converting them to Excalidraw.",
+  "author": "mengchuan.gao",
+  "isDesktopOnly": true
+}
