@@ -321,7 +321,7 @@ export const convertVsdToSvgPages = async ({
 }): Promise<VsdSvgPage[]> => {
   const runtime = loadNodeRuntime();
   const temporaryDirectory = await runtime.fs.mkdtemp(
-    runtime.path.join(runtime.os.tmpdir(), "svg-to-excalidraw-vsd-"),
+    runtime.path.join(runtime.os.tmpdir(), "viso-to-svg-vsd-"),
   );
 
   try {

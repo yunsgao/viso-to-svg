@@ -1,13 +1,14 @@
 {
   "name": "viso-to-svg",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "An Obsidian desktop plugin that exports Visio VSD files to SVG.",
   "scripts": {
     "build": "npm run clean && webpack --config webpack.visio.config.js",
     "build:watch": "webpack --config webpack.visio.config.js --watch",
     "clean": "rimraf dist-visio",
-    "test:typecheck": "tsc --noEmit"
+    "test:typecheck": "tsc --noEmit",
+    "package": "npm run build && node scripts/package-plugin.mjs"
   },
   "devDependencies": {
     "@babel/core": "7.15.5",
