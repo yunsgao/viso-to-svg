@@ -132,7 +132,7 @@ export default class VisioToSvgPlugin extends Plugin {
       }
 
       new Notice(`VSD exported: ${outputPaths.length} SVG file(s).`);
-      console.info("Visio to SVG export", outputPaths);
+      console.info("viso to svg export", outputPaths);
     } catch (error) {
       console.error("VSD export failed", error);
       new Notice(
@@ -195,7 +195,7 @@ class VisioToSvgSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Visio to SVG" });
+    containerEl.createEl("h2", { text: "viso to svg" });
 
     new Setting(containerEl)
       .setName("SVG output folder")

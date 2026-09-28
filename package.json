@@ -1,6 +1,6 @@
 {
   "name": "viso-to-svg",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "An Obsidian desktop plugin that exports Visio VSD files to SVG.",
   "scripts": {

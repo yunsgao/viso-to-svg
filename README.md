@@ -1,4 +1,4 @@
-# viso-to-svg
+# viso to svg
 
 独立的 Obsidian 桌面插件：将 Microsoft Visio 的 `.vsd` 文件转换为 SVG。
 
