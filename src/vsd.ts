@@ -1,4 +1,6 @@
 import { Platform } from "obsidian";
+import * as CFB from "cfb";
+import { detectFileType, renderToSvg } from "wmf-emf-renderer";
 
 declare const require: (moduleName: string) => any;
 
@@ -43,6 +45,41 @@ const normalizeSvgDimensions = (svg: string): string =>
       .replace(widthMatch[0], `width="${widthMatch[1]}in"`)
       .replace(heightMatch[0], `height="${heightMatch[1]}in"`);
   });
+
+const normalizeTextLineBreaks = (svg: string): string =>
+  svg.replace(
+    /<text\b([^>]*)>([\s\S]*?)<\/text>/giu,
+    (_match, textAttributes: string, textContent: string) => {
+      const spans = [...textContent.matchAll(/<tspan\b([^>]*)>/giu)];
+      const x = textAttributes.match(/\bx\s*=\s*(["'])(.*?)\1/iu)?.[2];
+      if (
+        spans.length < 2 ||
+        !x ||
+        spans.some((span) => /\b(?:x|y|dx|dy)\s*=/iu.test(span[1]))
+      ) {
+        return _match;
+      }
+
+      let lineIndex = 0;
+      const positionedText = textContent.replace(
+        /<tspan\b([^>]*)>/giu,
+        (_span, spanAttributes: string) => {
+          const fontSizeValue =
+            spanAttributes.match(/\bfont-size\s*=\s*(["'])(.*?)\1/iu)?.[2] ||
+            textAttributes.match(/\bfont-size\s*=\s*(["'])(.*?)\1/iu)?.[2];
+          const fontSize = Number.parseFloat(fontSizeValue || "");
+          const lineHeight = Number.isFinite(fontSize)
+            ? Number((fontSize * 1.2).toFixed(4))
+            : 14.4;
+          const linePosition =
+            lineIndex++ === 0 ? ` x="${x}"` : ` x="${x}" dy="${lineHeight}"`;
+          return `<tspan${spanAttributes}${linePosition}>`;
+        },
+      );
+
+      return `<text${textAttributes}>${positionedText}</text>`;
+    },
+  );
 
 const normalizeMarkerColors = (svg: string): string => {
   const withInheritedColors = svg.replace(
@@ -252,6 +289,95 @@ const normalizeEmbeddedImages = (svg: string, runtime: NodeRuntime): string =>
     },
   );
 
+const getOlePreviewMetafile = (
+  runtime: NodeRuntime,
+  base64: string,
+): Uint8Array | null => {
+  try {
+    const compoundFile = CFB.read(
+      runtime.buffer.from(base64.replace(/\s+/gu, ""), "base64"),
+    );
+    const previewPath = compoundFile.FullPaths.find((fullPath) =>
+      /OlePres000$/iu.test(fullPath),
+    );
+    if (!previewPath) {
+      return null;
+    }
+
+    const previewEntry = CFB.find(compoundFile, previewPath);
+    if (!previewEntry) {
+      return null;
+    }
+
+    const preview = runtime.buffer.from(previewEntry.content);
+    for (let offset = 20; offset < preview.length - 16; offset += 1) {
+      const metafile = preview.subarray(offset);
+      const fileType = detectFileType(metafile);
+      if (fileType !== "unknown") {
+        if (fileType === "wmf" || fileType === "placeable-wmf") {
+          const placeableHeaderLength = fileType === "placeable-wmf" ? 22 : 0;
+          const declaredLength =
+            placeableHeaderLength +
+            preview.readUInt32LE(offset + placeableHeaderLength + 6) * 2;
+          if (
+            declaredLength >= placeableHeaderLength + 18 &&
+            declaredLength <= metafile.length
+          ) {
+            return metafile.subarray(0, declaredLength);
+          }
+        }
+        return metafile;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const normalizeEmbeddedOlePreviews = (
+  svg: string,
+  runtime: NodeRuntime,
+): string =>
+  svg.replace(/<image\b[^>]*>/giu, (imageTag) => {
+    const hrefMatch = imageTag.match(
+      /((?:xlink:)?href=["'])data:object\/ole;base64,([A-Za-z0-9+/=\r\n]+)(["'])/iu,
+    );
+    if (!hrefMatch) {
+      return imageTag;
+    }
+
+    const metafile = getOlePreviewMetafile(runtime, hrefMatch[2]);
+    if (!metafile) {
+      return imageTag;
+    }
+
+    const dimension = (name: string, fallback: number): number => {
+      const value = imageTag.match(
+        new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)`, "iu"),
+      )?.[1];
+      const parsed = Number.parseFloat(value || "");
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+    const renderedSvg = renderToSvg(metafile, {
+      viewWidth: dimension("width", 800),
+      viewHeight: dimension("height", 600),
+    });
+    const transparentSvg = renderedSvg.replace(
+      /(<svg\b[^>]*>[\s\r\n]*)<rect\b(?=[^>]*\bx=["']0["'])(?=[^>]*\by=["']0["'])(?=[^>]*\bfill=["']#ffffff["'])[^>]*\/>/iu,
+      "$1",
+    );
+    const renderedSvgBase64 = runtime.buffer
+      .from(transparentSvg, "utf8")
+      .toString("base64");
+
+    return imageTag.replace(
+      hrefMatch[0],
+      `${hrefMatch[1]}data:image/svg+xml;base64,${renderedSvgBase64}${hrefMatch[3]}`,
+    );
+  });
+
 const platformFolder = (): string => {
   if (Platform.isWin) {
     return "win-x64";
@@ -348,12 +474,17 @@ export const convertVsdToSvgPages = async ({
       files.map(async (fileName) => ({
         fileName,
         svg: normalizeMarkerColors(
-          normalizeEmbeddedImages(
-            normalizeSvgDimensions(
-              await runtime.fs.readFile(
-                runtime.path.join(temporaryDirectory, fileName),
-                "utf8",
+          normalizeEmbeddedOlePreviews(
+            normalizeEmbeddedImages(
+              normalizeTextLineBreaks(
+                normalizeSvgDimensions(
+                  await runtime.fs.readFile(
+                    runtime.path.join(temporaryDirectory, fileName),
+                    "utf8",
+                  ),
+                ),
               ),
+              runtime,
             ),
             runtime,
           ),

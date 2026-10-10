@@ -31,3 +31,13 @@ projects. Their original license and copyright notices remain applicable:
 
 System libraries supplied by macOS, including `libSystem`, `libc++`, `libxml2`,
 `libz`, `libiconv`, `libexpat`, `libbz2`, and Apple frameworks, are not bundled.
+
+## JavaScript runtime dependencies
+
+The plugin bundle also includes the following packages. Their full license texts
+are copied into the packaged plugin's `licenses/` directory.
+
+- [cfb](https://github.com/SheetJS/js-cfb) 1.2.2 — Apache-2.0.
+- [adler-32](https://github.com/SheetJS/js-adler32) 1.3.1 — Apache-2.0.
+- [crc-32](https://github.com/SheetJS/js-crc32) 1.2.2 — Apache-2.0.
+- [wmf-emf-renderer](https://github.com/congduan/WmfEmfViewer) 0.2.1 — MIT.

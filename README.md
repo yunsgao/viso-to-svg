@@ -1,6 +1,7 @@
 # viso to svg
 
 独立的 Obsidian 桌面插件：将 Microsoft Visio 的 `.vsd` 文件转换为 SVG。
+支持将带有预览缓存的 MathType OLE 公式转换为透明背景的 SVG 图形，并恢复 SVG 中显式定义的文本换行；公式以静态图形呈现，不保留公式编辑能力。
 
 本项目与 `svg-to-excalidraw` 分开维护，不负责 SVG 到 Excalidraw 的转换，也不依赖或合并该项目的代码。
 
