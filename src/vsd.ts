@@ -1,6 +1,6 @@
 import { Platform } from "obsidian";
 import * as CFB from "cfb";
-import { detectFileType, renderToSvg } from "wmf-emf-renderer";
+import { detectFileType, renderToSvg, WmfDrawer } from "wmf-emf-renderer";
 
 declare const require: (moduleName: string) => any;
 
@@ -336,6 +336,77 @@ const getOlePreviewMetafile = (
   return null;
 };
 
+const symbolDelimiterParts: Record<number, string> = {
+  230: "\u239B",
+  231: "\u239C",
+  232: "\u239D",
+  233: "\u23A1",
+  234: "\u23A2",
+  235: "\u23A3",
+  236: "\u23A7",
+  237: "\u23A8",
+  238: "\u23A9",
+  239: "\u23AA",
+  246: "\u239E",
+  247: "\u239F",
+  248: "\u23A0",
+  249: "\u23A4",
+  250: "\u23A5",
+  251: "\u23A6",
+  252: "\u23AB",
+  253: "\u23AC",
+  254: "\u23AD",
+};
+
+interface WmfSymbolMapper {
+  currentFontFace?: string;
+  mapSymbolString(text: string): string;
+}
+
+const renderOleMetafile = (
+  metafile: Uint8Array,
+  options: { viewWidth: number; viewHeight: number },
+): string => {
+  const fileType = detectFileType(metafile);
+  if (fileType !== "wmf" && fileType !== "placeable-wmf") {
+    return renderToSvg(metafile, options);
+  }
+
+  const symbolMapper = WmfDrawer.prototype as unknown as WmfSymbolMapper;
+  const originalMapSymbolString = symbolMapper.mapSymbolString;
+  symbolMapper.mapSymbolString = function (text: string): string {
+    if (!/symbol/iu.test(this.currentFontFace || "")) {
+      return originalMapSymbolString.call(this, text);
+    }
+
+    return Array.from(text, (character) =>
+      symbolDelimiterParts[character.charCodeAt(0)] ??
+      originalMapSymbolString.call(this, character),
+    ).join("");
+  };
+
+  let renderedSvg: string;
+  try {
+    renderedSvg = renderToSvg(metafile, options);
+  } finally {
+    symbolMapper.mapSymbolString = originalMapSymbolString;
+  }
+
+  return renderedSvg.replace(
+    /<text\b[^>]*>[\s\S]*?<\/text>/giu,
+    (textElement) => {
+      if (!/[\u239B-\u23AD]/u.test(textElement)) {
+        return textElement;
+      }
+
+      return textElement.replace(
+        /font-family="[^"]*"/iu,
+        'font-family="Segoe UI Symbol, Cambria Math, Symbol, sans-serif"',
+      );
+    },
+  );
+};
+
 const normalizeEmbeddedOlePreviews = (
   svg: string,
   runtime: NodeRuntime,
@@ -360,7 +431,7 @@ const normalizeEmbeddedOlePreviews = (
       const parsed = Number.parseFloat(value || "");
       return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     };
-    const renderedSvg = renderToSvg(metafile, {
+    const renderedSvg = renderOleMetafile(metafile, {
       viewWidth: dimension("width", 800),
       viewHeight: dimension("height", 600),
     });
