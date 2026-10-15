@@ -52,9 +52,18 @@ const normalizeTextLineBreaks = (svg: string): string =>
     (_match, textAttributes: string, textContent: string) => {
       const spans = [...textContent.matchAll(/<tspan\b([^>]*)>/giu)];
       const x = textAttributes.match(/\bx\s*=\s*(["'])(.*?)\1/iu)?.[2];
+      const spanStyleSignature = (attributes: string): string =>
+        attributes.trim().replace(/\s+/gu, " ");
+      const firstSpanStyle = spans[0]
+        ? spanStyleSignature(spans[0][1])
+        : "";
+      const hasMixedSpanStyles = spans.some(
+        (span) => spanStyleSignature(span[1]) !== firstSpanStyle,
+      );
       if (
         spans.length < 2 ||
         !x ||
+        hasMixedSpanStyles ||
         spans.some((span) => /\b(?:x|y|dx|dy)\s*=/iu.test(span[1]))
       ) {
         return _match;
@@ -98,6 +107,28 @@ const normalizeMarkerColors = (svg: string): string => {
       .replace(/\s*marker-(?:start|end)\s*:\s*url\([^)]*\)\s*;?/giu, "");
   });
 };
+
+const normalizeMarkerPositions = (svg: string): string =>
+  svg.replace(/<marker\b[^>]*>[\s\S]*?<\/marker>/giu, (markerTag) => {
+    const points = markerTag.match(
+      /<polyline\b[^>]*\bpoints\s*=\s*(["'])(.*?)\1/iu,
+    )?.[2];
+    const normalizedPoints = points?.trim().replace(/\s+/gu, " ");
+    const refX =
+      normalizedPoints === "10,0 0,5 10,10 9,5"
+        ? "0"
+        : normalizedPoints === "0,0 10,5 0,10 1,5"
+          ? "10"
+          : null;
+    if (!refX) {
+      return markerTag;
+    }
+
+    return markerTag.replace(
+      /\brefX\s*=\s*(["'])[^"']*\1/iu,
+      (_match, quote: string) => `refX=${quote}${refX}${quote}`,
+    );
+  });
 
 interface NodeRuntime {
   fs: {
@@ -544,20 +575,22 @@ export const convertVsdToSvgPages = async ({
     return await Promise.all(
       files.map(async (fileName) => ({
         fileName,
-        svg: normalizeMarkerColors(
-          normalizeEmbeddedOlePreviews(
-            normalizeEmbeddedImages(
-              normalizeTextLineBreaks(
-                normalizeSvgDimensions(
-                  await runtime.fs.readFile(
-                    runtime.path.join(temporaryDirectory, fileName),
-                    "utf8",
+        svg: normalizeMarkerPositions(
+          normalizeMarkerColors(
+            normalizeEmbeddedOlePreviews(
+              normalizeEmbeddedImages(
+                normalizeTextLineBreaks(
+                  normalizeSvgDimensions(
+                    await runtime.fs.readFile(
+                      runtime.path.join(temporaryDirectory, fileName),
+                      "utf8",
+                    ),
                   ),
                 ),
+                runtime,
               ),
               runtime,
             ),
-            runtime,
           ),
         ),
       })),
